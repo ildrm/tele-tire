@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+.local
+node_modules
+apps/web/.next
+apps/web/.next-e2e
+test-results
+playwright-report
+**/*.tsbuildinfo

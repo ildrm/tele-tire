@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+docs/source-prompt.md
+docs/IMPLEMENTATION_PROMPT.md
+node_modules
+apps/web/.next
+packages/db/migrations
+playwright-report
+test-results
+.local
+apps/web/.next-e2e

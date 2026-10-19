@@ -1,0 +1,43 @@
+name: TeleTier checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: teletier
+          POSTGRES_PASSWORD: teletier
+          POSTGRES_DB: teletier
+        ports: ["5432:5432"]
+        options: --health-cmd="pg_isready -U teletier" --health-interval=5s --health-retries=10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql://teletier:teletier@127.0.0.1:5432/teletier
+      REDIS_URL: redis://127.0.0.1:6379
+      NODE_ENV: test
+      DEV_LOGIN: "true"
+      TELEGRAM_FAKE: "true"
+      TOKEN_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      APP_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+      - run: npm install --global pnpm@12.14.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate && pnpm db:migrate && pnpm db:prepare-tests
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-evidence
+          path: test-results/

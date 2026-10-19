@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+model User {
+  id String @id @default(uuid())
+  subject String @unique
+  telegramId BigInt @unique
+  name String
+  createdAt DateTime @default(now())
+  sessions Session[]
+  members TenantMember[]
+}
+model Session {
+  id String @id
+  userId String
+  csrf String
+  expiresAt DateTime
+  user User @relation(fields:[userId],references:[id])
+  @@index([expiresAt])
+}
+model AuthAttempt {
+  id String @id
+  verifier String
+  nonce String
+  expiresAt DateTime
+}
+model Tenant {
+  id String @id @default(uuid())
+  name String
+  timezone String @default("UTC")
+  createdAt DateTime @default(now())
+  members TenantMember[]
+  bots Bot[]
+}
+model TenantMember {
+  tenantId String
+  userId String
+  role String @default("OWNER")
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+  @@id([tenantId,userId])
+}
+model Bot {
+  id String @id @default(uuid())
+  tenantId String @unique
+  telegramId BigInt @unique
+  username String
+  tokenCipher String
+  keyVersion String
+  endpoint String @unique
+  secretHash String
+  status String @default("TOKEN_VERIFIED")
+  webhookUrl String?
+  checkedAt DateTime?
+  reconcileOffset Int @default(0)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  @@unique([tenantId,id])
+}
+model Chat {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  telegramId BigInt @unique
+  title String
+  type String
+  healthy Boolean @default(false)
+  checkedAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@index([botId])
+}
+model Policy {
+  id String @id @default(uuid())
+  tenantId String
+  terms String
+  refunds String
+  support String
+  privacy String
+  createdAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model Plan {
+  id String @id @default(uuid())
+  tenantId String
+  name String
+  state String @default("ACTIVE")
+  currentVersionId String
+  createdAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@index([tenantId,state])
+}
+model PlanVersion {
+  id String @id @default(uuid())
+  tenantId String
+  planId String
+  name String
+  kind String
+  stars Int
+  chatIds String[]
+  policyId String
+  createdAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@index([planId])
+}
+model Subscriber {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  telegramId BigInt
+  name String
+  contacted Boolean @default(false)
+  reminders Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@unique([botId,telegramId])
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model Checkout {
+  id String @id
+  tenantId String
+  botId String
+  subscriberId String
+  versionId String
+  policyId String
+  acceptedAt DateTime
+  expiresAt DateTime
+  status String @default("CREATED")
+  precheckoutId String?
+  createdAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@index([botId,subscriberId])
+}
+model Offer {
+  id String @id
+  tenantId String
+  botId String
+  subscriberId String
+  versionId String
+  policyId String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([botId,subscriberId,expiresAt])
+}
+model Inbox {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  updateId BigInt
+  body Json
+  status String @default("PENDING")
+  error String?
+  createdAt DateTime @default(now())
+  processedAt DateTime?
+  @@unique([botId,updateId])
+  @@index([status,createdAt])
+}
+model Payment {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  subscriberId String
+  checkoutId String
+  versionId String
+  chargeId String
+  updateId BigInt
+  stars Int
+  recurring Boolean
+  firstRecurring Boolean
+  paidAt DateTime
+  periodStart DateTime
+  periodEnd DateTime
+  createdAt DateTime @default(now())
+  @@unique([botId,chargeId])
+  @@unique([tenantId,id])
+  @@index([tenantId,paidAt])
+}
+model Subscription {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  subscriberId String
+  checkoutId String @unique
+  initialChargeId String
+  paidThrough DateTime
+  canceled Boolean @default(false)
+  @@unique([tenantId,id])
+  @@index([botId,subscriberId])
+}
+model Refund {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  chargeId String
+  subscriberId String?
+  stars Int
+  status String
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  confirmedAt DateTime?
+  @@unique([botId,chargeId])
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model Grant {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  subscriberId String
+  chatId String
+  paymentId String?
+  startsAt DateTime
+  expiresAt DateTime
+  revokedAt DateTime?
+  reason String?
+  @@unique([paymentId,chatId])
+  @@unique([tenantId,id])
+  @@index([tenantId,subscriberId,expiresAt])
+  @@index([chatId,subscriberId])
+}
+model Membership {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  chatId String
+  subscriberId String
+  observed String @default("UNKNOWN")
+  desired String @default("NOT_ENTITLED")
+  platformBan Boolean @default(false)
+  banIntent Boolean @default(false)
+  invite String?
+  inviteExpiresAt DateTime?
+  observedAt DateTime?
+  observationUpdateId BigInt @default(0)
+  @@unique([chatId,subscriberId])
+  @@index([tenantId,desired])
+}
+model AccessOperation {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  chatId String
+  subscriberId String
+  kind String
+  status String @default("PENDING")
+  result String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([botId,status])
+}
+model Job {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  key String @unique
+  kind String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAt DateTime @default(now())
+  leaseUntil DateTime?
+  leaseToken String?
+  error String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([status,nextAt])
+  @@index([tenantId,createdAt])
+}
+model Notification {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  subscriberId String
+  key String @unique
+  text String
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  @@index([tenantId,createdAt])
+}
+model Audit {
+  id String @id @default(uuid())
+  tenantId String
+  actorId String
+  action String
+  target String
+  reason String
+  result Json
+  createdAt DateTime @default(now())
+  @@index([tenantId,createdAt])
+}
+model Incident {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  key String @unique
+  kind String
+  detail String
+  status String @default("OPEN")
+  createdAt DateTime @default(now())
+  @@index([tenantId,status,createdAt])
+}
+model ProviderEvent {
+  id String @id @default(uuid())
+  tenantId String
+  botId String
+  key String @unique
+  data Json
+  createdAt DateTime @default(now())
+}

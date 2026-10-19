@@ -1,0 +1,26 @@
+# Threat model and security review
+
+| Boundary / attack                     | Implemented control                                                                                                        | Evidence / residual concern                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Forged OIDC identity                  | RS256 JWKS verification, issuer/audience/nonce/time requirements, opaque sub + validated profile ID                        | Generated-key signature tests; live OIDC NOT VERIFIED                                     |
+| Login replay / fixation               | Random single-use hashed state, PKCE, expiring auth attempt, fresh random server session, HttpOnly SameSite cookie         | HTTP and signature tests; provider callback live test pending                             |
+| CSRF / tenant IDOR                    | Same-origin mutation header plus session CSRF, session tenant membership, owner guards, composite FKs                      | Cross-origin/header/foreign-key negative tests                                            |
+| Stolen bot token / logs               | AES-GCM tenant AAD, key version, no token returns; adapter hides token-bearing fetch URLs; Prisma query logging disabled   | Encryption and API response tests; managed KMS/rotation is a release blocker              |
+| Bot takeover / wrong chat             | getMe, global bot/chat uniqueness, explicit webhook handover, private-chat and creator/admin checks                        | Integration and browser setup tests                                                       |
+| Forged / duplicated webhook           | Opaque route, constant-time hashed secret, size/rate limits, durable unique inbox/charge keys                              | Concurrent replay and wrong-secret tests                                                  |
+| Amount / buyer / snapshot swap        | Exact XTR integer amount, immutable version, policy and buyer binding, quote reservation                                   | Negative pre-checkout and charge tests                                                    |
+| Old/reordered charge or refund        | Canonical recurring subscription, provider dates, per-bot serialization, refund tombstone and interval-specific revocation | Late renewal/refund-before-charge/old refund tests                                        |
+| Copied invite / unauthorized approval | Requesting ID, current union of grants, private admin rights                                                               | Copied-link and separate observed-state tests                                             |
+| Forced unban / wrongful expiry        | Confirmed platform provenance, human ban invalidation, current admin/owner check and grants union                          | Expiry/renewal/moderator/admin tests; Telegram identical-state race is a live review item |
+| Worker crash / Redis outage           | Database-authoritative outbox, orphan repair, leases/tokens/heartbeat, bounded retries and DLQ                             | PostgreSQL replay/lease and real BullMQ tests                                             |
+| Ambiguous refund response             | Persist API_REQUESTED before dispatch; do not blindly repeat; reconcile incoming refund events and Star ledger             | Refund state tests; live reconciliation semantics pending                                 |
+| Data overexposure                     | Scoped JSON export with audit, processed inbox minimization, no raw inbox from list APIs                                   | HTTP secret omission tests; request intake/automated deletion incomplete                  |
+
+## Sequential feature review record
+
+- **Domain**: interval union replaces is_paid. Immutable charge facts and per-charge grant revocation protect later renewals. Refunded periods do not anchor prepaid stacking. Cancellation preserves already-paid time.
+- **Telegram**: exact native recurrence, one-price XTR invoices, mandatory join-request identity, explicit update selection, no member_limit conflict, creator-specific paysupport. API errors redact credentials.
+- **Security**: verified identity is separated from profile user ID; mutation origin/CSRF and tenant composite relations are checked. Operator access is distinct and audited. Dev fixtures are rejected in production config.
+- **Adversarial QA**: simultaneous duplicate deliveries, invalid amount/identity/TTL, copied links, stale leases, refunds in either order, manual-grant union, moderator/admin protection and blocked-message behavior run against PostgreSQL and a fake Telegram provider.
+
+Production deployments must separate migration-owner and application DB roles, restrict DB/Redis to internal networks, require HTTPS, wrap encryption keys in managed infrastructure, rotate compromised tokens and invalidate associated webhook credentials. Local Compose credentials are deliberately development-only. Automated checks do not replace an independent security review.
